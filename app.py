@@ -5,9 +5,6 @@ import re
 
 st.set_page_config(page_title="Ads Prospector", layout="wide")
 
-# -------------------------
-# LANGUAGE
-# -------------------------
 lang = st.selectbox("Language / Idioma", ["Português", "English"])
 
 def t(pt, en):
@@ -25,44 +22,50 @@ def get_html(url):
         headers = {"User-Agent": "Mozilla/5.0"}
         return requests.get(url, headers=headers, timeout=10).text
     except:
-        return None
+        return ""
 
 def extract_name(html, url):
-    if not html:
-        return url
-
     soup = BeautifulSoup(html, "html.parser")
 
     og = soup.find("meta", property="og:title")
     if og and og.get("content"):
         name = og["content"]
+    elif soup.title:
+        name = soup.title.string
     else:
-        name = soup.title.string if soup.title else url
+        name = url
 
     name = re.split(r'[\|\-–]', name)[0]
     return name.strip()
 
 def find_social_links(html):
     socials = {"instagram": None, "facebook": None}
-    if not html:
-        return socials
-    
+
+    # método 1: links
     soup = BeautifulSoup(html, "html.parser")
-    links = soup.find_all("a", href=True)
-    
-    for link in links:
+    for link in soup.find_all("a", href=True):
         href = link["href"]
         if "instagram.com" in href:
             socials["instagram"] = href
         if "facebook.com" in href:
             socials["facebook"] = href
-    
+
+    # método 2: regex (melhor)
+    if not socials["instagram"]:
+        match = re.search(r"(https?:\/\/(www\.)?instagram\.com\/[A-Za-z0-9_.]+)", html)
+        if match:
+            socials["instagram"] = match.group(0)
+
+    if not socials["facebook"]:
+        match = re.search(r"(https?:\/\/(www\.)?facebook\.com\/[A-Za-z0-9_.]+)", html)
+        if match:
+            socials["facebook"] = match.group(0)
+
     return socials
 
 def get_domain(url):
     return url.split("//")[-1].split("/")[0]
 
-# 🔥 NOVO — usa Facebook correto
 def create_ads_links(name, domain, facebook_url):
     fb_page = None
 
@@ -75,7 +78,7 @@ def create_ads_links(name, domain, facebook_url):
     return {
         "meta": f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all&view_all_page_id={fb_page}" if fb_page else None,
         "tiktok": f"https://ads.tiktok.com/business/creativecenter/inspiration/topads/search/{name}",
-        "google": f"https://adstransparency.google.com/?q={domain}"
+        "google": f"https://adstransparency.google.com/advertiser?q={domain}"
     }
 
 # -------------------------
@@ -86,8 +89,8 @@ if st.button(t("Analisar", "Analyze")):
         st.warning(t("Insira um link", "Insert a link"))
     else:
         html = get_html(url)
-        socials = find_social_links(html)
         name = extract_name(html, url)
+        socials = find_social_links(html)
         domain = get_domain(url)
 
         st.subheader(t("🏢 Empresa", "🏢 Company"))
@@ -96,8 +99,16 @@ if st.button(t("Analisar", "Analyze")):
         st.subheader(t("🌐 Presença Digital", "🌐 Digital Presence"))
 
         st.write("🌐 Site:", url)
-        st.write("📸 Instagram:", socials["instagram"] or "❌")
-        st.write("👍 Facebook:", socials["facebook"] or "❌")
+
+        if socials["instagram"]:
+            st.markdown(f"📸 [Instagram]({socials['instagram']})")
+        else:
+            st.warning("Instagram não encontrado")
+
+        if socials["facebook"]:
+            st.markdown(f"👍 [Facebook]({socials['facebook']})")
+        else:
+            st.warning("Facebook não encontrado")
 
         st.subheader(t("📢 Anúncios", "📢 Ads"))
 
@@ -108,24 +119,16 @@ if st.button(t("Analisar", "Analyze")):
         with col1:
             st.write("Meta")
             if ads_links["meta"]:
-                st.markdown(f"[🔍 {t('Ver anúncios','View Ads')}]({ads_links['meta']})")
+                st.markdown(f"[🔍 Ver anúncios]({ads_links['meta']})")
             else:
-                st.warning(t("Página do Facebook não encontrada", "Facebook page not found"))
+                st.warning("Sem página do Facebook")
 
         with col2:
             st.write("TikTok")
-            st.markdown(f"[🔍 {t('Ver anúncios','View Ads')}]({ads_links['tiktok']})")
+            st.markdown(f"[🔍 Ver anúncios]({ads_links['tiktok']})")
 
         with col3:
             st.write("Google")
-            st.markdown(f"[🔍 {t('Ver anúncios','View Ads')}]({ads_links['google']})")
+            st.markdown(f"[🔍 Ver anúncios]({ads_links['google']})")
 
-        st.subheader(t("🧠 Diagnóstico", "🧠 Insights"))
-
-        if not socials["instagram"]:
-            st.warning(t("Empresa não está no Instagram", "Company not on Instagram"))
-
-        if not socials["facebook"]:
-            st.warning(t("Empresa não está no Facebook", "Company not on Facebook"))
-
-        st.success(t("Análise concluída", "Analysis completed"))
+        st.success("Análise concluída")
